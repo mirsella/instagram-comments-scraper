@@ -1,6 +1,4 @@
-use std::{
-    cell::Ref, env, fs::File, io::Write, os::unix::fs::FileExt, thread::sleep, time::Duration,
-};
+use std::{collections::HashMap, env, fs::File, io::Write, thread::sleep, time::Duration};
 
 use anyhow::{anyhow, Context, Result};
 use dotenv_codegen::dotenv;
@@ -47,6 +45,7 @@ fn main() -> Result<()> {
     let jsscroll = format!("el = document.evaluate('{scroll_xpath}', document, null, XPathResult.FIRST_ORDERED_NODE_TYPE, null).singleNodeValue; el.scrollTop = el.scrollHeight;");
     let loadingwheel = "div[data-visualcompletion=loading-state]";
     loop {
+        println!("scrolling");
         let mut quit = true;
         _ = tab.find_element(loadingwheel).map(|_| quit = false);
         tab.evaluate(&jsscroll, true)?;
@@ -57,6 +56,7 @@ fn main() -> Result<()> {
             break;
         }
     }
+    println!("done scrolling, getting comments");
     let spans =
         tab.find_elements_by_xpath("//div/div/div/div/div[2]/div/div[1]/div/div/span[2]/span[1]")?;
     println!("founds {} comments", spans.len());
@@ -65,13 +65,43 @@ fn main() -> Result<()> {
         .map(Element::get_inner_text)
         .collect::<Result<Vec<_>>>()
         .unwrap();
-    write_comments_csv(id, comments.iter().map(AsRef::as_ref));
     print_stats(&comments);
+    write_comments_csv(id, comments.iter().map(AsRef::as_ref));
     Ok(())
 }
 
 fn print_stats(comments: &[String]) {
-    todo!()
+    let mut topwords = comments
+        .iter()
+        .fold(HashMap::new(), |mut map, comment| {
+            let word = comment
+                .split_whitespace()
+                .next()
+                .unwrap_or("")
+                .trim_matches(|c: char| c.is_ascii_punctuation() || c.is_ascii_whitespace());
+            *map.entry(word.to_lowercase()).or_insert(0) += 1;
+            map
+        })
+        .into_iter()
+        .collect::<Vec<_>>();
+    topwords.sort_by(|a, b| b.1.cmp(&a.1));
+    println!("\ntop 10 first words:");
+    for word in &topwords[..10] {
+        println!("{}: {}", word.0, word.1);
+    }
+    println!();
+    let non = topwords
+        .iter()
+        .find(|t| t.0 == "non")
+        .map(|t| t.1)
+        .unwrap_or(0);
+    let oui = topwords
+        .iter()
+        .find(|t| t.0 == "oui")
+        .map(|t| t.1)
+        .unwrap_or(0);
+    println!("oui: {}% {oui}", oui * 100 / (non + oui));
+    println!("non: {}% {non}", non * 100 / (non + oui));
 }
 
 fn write_comments_csv<'a, I: Iterator<Item = &'a str>>(id: &str, comments: I) {
@@ -84,8 +114,8 @@ fn write_comments_csv<'a, I: Iterator<Item = &'a str>>(id: &str, comments: I) {
         }
     };
     for comment in comments {
-        file.write_all(comment.as_bytes()).unwrap();
-        file.write_all(&[b',']).unwrap();
+        let comment = comment.replace('"', "'").replace(['\n', '\r'], " ");
+        writeln!(file, "\"{comment}\"").expect("failed to write to file");
     }
     println!("wrote comments to {filename}");
 }
