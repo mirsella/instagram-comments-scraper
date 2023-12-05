@@ -1,7 +1,6 @@
-name: CI
+name: macos build
 
-on:
-  workflow_dispatch:
+on: workflow_dispatch
 
 # env:
 #   RUSTFLAGS: -Dwarnings # Turn warnings into errors
