@@ -9,6 +9,9 @@ on: workflow_dispatch
 jobs:
   macos:
     runs-on: macos-latest
+    env:
+      INSTA_USER: ${{ secrets.INSTA_USER }}
+      INSTA_PASS: ${{ secrets.INSTA_PASS }}
     steps:
       - uses: actions/checkout@v4
       - uses: dtolnay/rust-toolchain@master
